@@ -287,7 +287,7 @@ def main(options,args):
                         rRangeStringList.append(rRangeString)
                     if len(boxes)==1:
                         print "Before combine line 288"
-                        exec_me('combine -M ProfileLikelihood --signif %s/dijet_combine_%s_%s_lumi-%s_%s.txt -n %s_%s_lumi-%s_%s %s %s'%(options.outDir,model,massPoint,luminosity,box,model,massPoint,luminosity,box,rRangeString,sysString),options.dryRun)
+                        exec_me('combine -M ProfileLikelihood -m %s --signif %s/dijet_combine_%s_%s_lumi-%s_%s.txt -n %s_%s_lumi-%s_%s %s %s'%(massPoint,options.outDir,model,massPoint,luminosity,box,model,massPoint,luminosity,box,rRangeString,sysString),options.dryRun)
                         exec_me('mv higgsCombine%s_%s_lumi-%s_%s.ProfileLikelihood.mH120.root %s/'%(model,massPoint,luminosity,box,options.outDir),options.dryRun)
                 else:
                     rRangeString = ''
@@ -296,8 +296,8 @@ def main(options,args):
                         rRangeStringList.append(rRangeString)
                     if len(boxes)==1:
                         print "Before combine line 296 ", ("%.3f"%(lumi)).replace('.','p'), " ", lumi
-                        exec_me('combine -M Asymptotic -H ProfileLikelihood %s/dijet_combine_%s_%s_lumi-%s_%s.txt -n %s_%s_lumi-%s_%s --minimizerTolerance %f --minimizerStrategy %i %s --saveWorkspace %s %s'%(options.outDir,model,massPoint,luminosity,box,model,massPoint,luminosity,box,options.min_tol,options.min_strat,rRangeString,blindString,sysString),options.dryRun)
-                        exec_me('mv higgsCombine%s_%s_lumi-%s_%s.Asymptotic.mH120.root %s/'%(model,massPoint,luminosity,box,options.outDir),options.dryRun)
+                        exec_me('combine -M Asymptotic -m %s -H ProfileLikelihood %s/dijet_combine_%s_%s_lumi-%s_%s.txt -n %s_%s_lumi-%s_%s --minimizerTolerance %f --minimizerStrategy %i %s --saveWorkspace %s %s'%(massPoint,options.outDir,model,massPoint,luminosity,box,model,massPoint,luminosity,box,options.min_tol,options.min_strat,rRangeString,blindString,sysString),options.dryRun)
+                        exec_me('mv higgsCombine%s_%s_lumi-%s_%s.Asymptotic.mH%s.root %s/'%(model,massPoint,luminosity,box,massPoint,options.outDir),options.dryRun)
     if len(boxes)>1:
         lumiTotal = sum(lumiFloat)
         for box,lumi in zip(boxes,lumiFloat): 
