@@ -256,6 +256,8 @@ if __name__ == '__main__':
                 help="multiple background pdfs")
   #parser.add_option('-h', '--histo', dest=histogramName, default='signalHisto_0', action='store_true',
   #              help='histogram name')
+  parser.add_option('-u', '--unbinned', dest="unbinFile", default="new.root", type="string",
+                help='unbinned file')
 
   rt.RooMsgService.instance().setGlobalKillBelow(rt.RooFit.FATAL)
   rt.gStyle.SetPaintTextFormat('+.2f')
@@ -270,6 +272,9 @@ if __name__ == '__main__':
   noFit = options.noFit
   fitRegion = options.fitRegion
   plotRegion = options.plotRegion
+  unbinFileName = options.unbinFile
+  print  "unbin file ", unbinFileName
+  unbinFile = rt.TFile(unbinFileName)
   histoName = cfg.getVariables(box, "histoName")
 
   if options.signalFileName==None:
@@ -306,6 +311,7 @@ if __name__ == '__main__':
           if histoName in names:
               print "Histogram name: ", histoName
               myTH1 = rootFile.Get(histoName)
+              break
   if myTH1 is None:
       print "give a root file as input"
 
@@ -436,11 +442,38 @@ if __name__ == '__main__':
   #toy.FillRandom("f1",100000)#myTH1.GetEntries())
   #myRealTH1 = convertToTh1xHist(toy)
   
-  dataHist = rt.RooDataHist("data_obs","data_obs",rt.RooArgList(th1x), rt.RooFit.Import(myRealTH1))
+
+  #f1 = rt.TF1( "f1", "(TMath::Power((1-(x/13000)),[2])*TMath::Power(x/13000,[0]+[1]*TMath::Log(x/13000)))", 600,2800)
+  #f1.SetParameters(-13,-1.4, .2)
+  ##h_SR_Prediction->Fit("f1","R");
+  #myRebinnedTH1.Fit("f1","R")
+  #f1.SetParameters(f1.GetParameter(0),f1.GetParameter(1),f1.GetParameter(2))
+  #myRebinnedTH1.Fit("f1","R")
+  #toy = rt.TH1D("toy","toy", myRebinnedTH1.GetNbinsX(), myRebinnedTH1.GetXaxis().GetXmin(), myRebinnedTH1.GetXaxis().GetXmax())
+  #f1.SetRange(600,2800)
+  #
+  #print "SumWeights: ",myRebinnedTH1.GetSumOfWeights()," integral: ",myRebinnedTH1.Integral()," entries: ",myRebinnedTH1.GetEntries()
+  #print "toy events: ",toy.Integral()," histo events in region: ",myRebinnedTH1.Integral(600,3000)
+
+  #nEntries = myRebinnedTH1.GetEntries()
+  #print nEntries
+  #toy.FillRandom("f1", 1022799)# nEntries)
+
+  ##cMio = rt.TCanvas("cMio","cMio",1)
+  ##toy.Draw("histo")
+  ##f1.Draw("SAME")
+  ###myRebinnedTH1.Draw("SAME")
+  ##cMio.SaveAs("mio2.png")
+
+  #toyHist = convertToTh1xHist(toy)
+  dataHist = rt.RooDataHist("data_obs","data_obs",rt.RooArgList(th1x), rt.RooFit.Import(myRealTH1))#toyHist))#myRealTH1))
   dataHist.Print('v')
   
+  myTree= unbinFile.Get("mio")
+  ak08_photon_mass = rt.RooRealVar ("ak08_photon_mass","ak08_photon_mass",600, 3000)
+  dataSet = rt.RooDataSet("data_obs1", "data_obs1", rt.RooArgSet(ak08_photon_mass), rt.RooFit.Import(myTree))
   
-  rootTools.Utils.importToWS(w,dataHist)
+  rootTools.Utils.importToWS(w,dataHist)#dataSet)#dataHist)
 
   if noFit and options.inputFitFile is not None:
       print "noFit and inputFitFiles options NONE"
@@ -529,12 +562,15 @@ if __name__ == '__main__':
       total = extDijetPdf.expectedEvents(rt.RooArgSet(th1x))
           
 
-  #myCanvas = rt.TCanvas("myCanvas", "myCanvas",1)
-  #myFrame = (w.var('mjj')).frame()
+  myCanvas = rt.TCanvas("myCanvas", "myCanvas",1)
+  myCanvas.SetLogy()
+  myFrame = ak08_photon_mass.frame(rt.RooFit.Bins(40),rt.RooFit.Title("Pass sample")) #(w.var('mjj')).frame()
+  dataSet.plotOn(myFrame)#, rt.SetLineColor(2))
   #dataHist.plotOn(myFrame)
-  #extDijetPdf.plotOn(myFrame)
-  #myFrame.Draw()
-  #myCanvas.SaveAs("mio.png")
+  #w.pdf('%s_bkg_unbin'%box).plotOn(myFrame)
+  #w.pdf('extDijetPdf').plotOn(myFrame)#, SetLineColor(2))# rt.RooFit.Normalization(1.0,rt.RooFit.RooAbsReal.RelativeExpected))
+  myFrame.Draw()
+  myCanvas.SaveAs("mio.png")
   #extDijetPdf.plotOn(myFrame)
 
   
@@ -605,7 +641,7 @@ if __name__ == '__main__':
       predYield = asimov.weight(rt.RooArgSet(th1x))
       dataYield = dataHist_reduce.weight(rt.RooArgSet(th1x))
       rss += float(predYield-dataYield) * float(predYield-dataYield)
-      print "%i <= mjj < %i; prediction: %.2f; data %i"  % (x[i],x[i+1],predYield,dataYield)
+      print "%i <= mVg < %i; prediction: %.2f; data %i"  % (x[i],x[i+1],predYield,dataYield)
   print "RSS = ", rss 
       
   rt.TH1D.SetDefaultSumw2()
@@ -654,6 +690,13 @@ if __name__ == '__main__':
 
       pad_1.cd()
       
+      #myFrame = (w.var('mjj')).frame()
+      #dataHist.plotOn(myFrame)
+      #dataSet.plotOn(myFrame, rt.LineColor(2))
+      #extDijetPdf.plotOn(myFrame)
+      #myFrame.Draw()
+      #myCanvas.SaveAs("mio.png")
+      #extDijetPdf.plotOn(myFrame)
       binning = rt.RooBinning(w.var('mjj').getMin('Eff'),w.var('mjj').getMax('Eff'))
       xEff = array('d',[w.var('mjj').getMin('Eff')])
       if options.doTriggerFit or options.doSimultaneousFit or options.noFit:
@@ -681,7 +724,7 @@ if __name__ == '__main__':
       for i in range(1,histo.GetNbinsX()+1):
           histo.SetBinContent(i,0)             
           histo.SetBinError(i,0)                    
-      histo.Draw()
+      histo.Draw("SAME")
       #histo.GetXaxis().SetRangeUser(w.var('mjj').getMin('Eff'),w.var('mjj').getMax('Eff'))
       if options.l1Trigger:
           histo.GetXaxis().SetRangeUser(w.var('mjj').getMin('Eff'),x[15])
@@ -800,7 +843,7 @@ if __name__ == '__main__':
       h_eff_residual_vs_mass.GetXaxis().SetTitleSize(2*0.06)
       h_eff_residual_vs_mass.GetXaxis().SetLabelSize(2*0.05)
       #h_eff_residual_vs_mass.GetXaxis().SetTitle('m_{jj} [GeV]')
-      h_eff_residual_vs_mass.GetXaxis().SetTitle('Dijet mass [GeV]')
+      h_eff_residual_vs_mass.GetXaxis().SetTitle('V#gamma Mass [GeV]')
   
   
       h_eff_residual_vs_mass.Draw("histsame")
@@ -874,8 +917,8 @@ if __name__ == '__main__':
   #paper 
   pad_1.SetPad(0.01,0.37,0.99,0.98)
   pad_1.SetLogy()
-  if 'PF' in box or w.var('mjj').getMax() > 2037:
-      pad_1.SetLogx()
+#  if 'PF' in box or w.var('mjj').getMax() > 2037:
+#      pad_1.SetLogx()
   pad_1.SetRightMargin(0.05)
   pad_1.SetTopMargin(0.05)
   pad_1.SetLeftMargin(0.175)
@@ -891,10 +934,11 @@ if __name__ == '__main__':
   pad_2.SetRightMargin(0.05)
   pad_2.SetGridx()
   pad_2.SetGridy()
-  if 'PF' in box or w.var('mjj').getMax() > 2037:
-      pad_2.SetLogx()
+#  if 'PF' in box or w.var('mjj').getMax() > 2037:
+#      pad_2.SetLogx()
 
   pad_1.cd()
+  myFrame.Draw()
   
   myRebinnedDensityTH1 = myRebinnedTH1.Clone('data_obs_density')
   for i in range(1,nBins+1):
@@ -908,7 +952,7 @@ if __name__ == '__main__':
           myRebinnedDensityTH1.SetBinError(i,0)
   myRebinnedDensityTH1.GetXaxis().SetRangeUser(w.var('mjj').getMin(),w.var('mjj').getMax())
   # paper:
-  myRebinnedDensityTH1.GetYaxis().SetTitle('d#sigma/dm_{jj} [pb/TeV]')
+  myRebinnedDensityTH1.GetYaxis().SetTitle('d#sigma/dm_{j#gamma} [pb/TeV]')
   # PAS:
   #myRebinnedDensityTH1.GetYaxis().SetTitle('d#sigma / dm_{jj} [pb / GeV]')
   myRebinnedDensityTH1.GetYaxis().SetTitleOffset(1)
@@ -989,6 +1033,7 @@ if __name__ == '__main__':
   
   rt.gPad.SetLogy()
   
+  
   l = rt.TLatex()
   l.SetTextAlign(11)
   l.SetTextSize(0.045)
@@ -1032,8 +1077,8 @@ if __name__ == '__main__':
               leg.AddEntry(g_signal,"%s (%.2f TeV)"%(model,float(mass)/1000.),"l")   
           #leg.AddEntry(None,"%.1f pb"%(float(xsec)),"")         
   leg.Draw()
-  #background.Draw("csame")
-  #g_data.Draw("pezsame")
+  background.Draw("csame")
+  g_data.Draw("pezsame")
 
   #pave_sel = rt.TPaveText(0.2,0.03,0.5,0.25,"NDC")
   pave_sel = rt.TPaveText(0.2,0.03,0.5,0.23,"NDC")
@@ -1059,7 +1104,7 @@ if __name__ == '__main__':
       pave_sel.AddText("Wide PF-jets")        
       #pave_sel.AddText("%.1f < m_{jj} < %.1f TeV"%(w.var('mjj').getMin('Low')/1000.,w.var('mjj').getMax('High')/1000.))
       pave_sel.AddText("m_{jj} > %.2f TeV"%(w.var('mjj').getMin('Low')/1000.))
-  pave_sel.AddText("|#eta| < 2.5, |#Delta#eta| < 1.3")
+###########  pave_sel.AddText("|#eta| < 2.5, |#Delta#eta| < 1.3")
   pave_sel.Draw("SAME")
   
   list_parameter = [p0_b, p0_b*(w.var('Ntot_bkg_%s'%box).getErrorHi() - w.var('Ntot_bkg_%s'%box).getErrorLo())/(2.0*w.var('Ntot_bkg_%s'%box).getVal()),                      
@@ -1111,13 +1156,15 @@ if __name__ == '__main__':
       h_background.SetLineWidth(2)
       h_background.Draw("histsame")
   g_data_clone.Draw("zpsame")
+  ##myFrame.Draw("SAME")
   g_data.Draw("zpsame")
+  #myFrame.Draw("SAME")
 
 
   
   if 'PF' in box:
       # paper
-      myRebinnedDensityTH1.GetYaxis().SetTitle('d#sigma/dm_{jj} [pb/TeV]')
+      myRebinnedDensityTH1.GetYaxis().SetTitle('d#sigma/dm_{j#gamma} [pb/TeV]')
       # PAS
       #myRebinnedDensityTH1.GetYaxis().SetTitle('d#sigma / dm_{jj} [pb / TeV]')
       myRebinnedDensityTH1.GetYaxis().SetLabelOffset(1000)
@@ -1149,7 +1196,7 @@ if __name__ == '__main__':
            
   if 'Calo' in box:
       # paper
-      myRebinnedDensityTH1.GetYaxis().SetTitle('d#sigma/dm_{jj} [pb/TeV]')
+      myRebinnedDensityTH1.GetYaxis().SetTitle('d#sigma/dm_{j#gamma} [pb/TeV]')
       # PAS
       #myRebinnedDensityTH1.GetYaxis().SetTitle('d#sigma / dm_{jj} [pb / TeV]')
       myRebinnedDensityTH1.GetYaxis().SetLabelOffset(1000)
@@ -1195,7 +1242,7 @@ if __name__ == '__main__':
   # PAS
   #h_fit_residual_vs_mass.GetXaxis().SetTitle('Dijet Mass [GeV]')
   # paper
-  h_fit_residual_vs_mass.GetXaxis().SetTitle('Dijet mass [GeV]')
+  h_fit_residual_vs_mass.GetXaxis().SetTitle('V#gamma Mass [GeV]')
 
   h_fit_residual_vs_mass.Draw("histsame")
   
@@ -1203,7 +1250,7 @@ if __name__ == '__main__':
       # PAS
       #h_fit_residual_vs_mass.GetXaxis().SetTitle('Dijet Mass [TeV]')
       # paper
-      h_fit_residual_vs_mass.GetXaxis().SetTitle('Dijet mass [TeV]')
+      h_fit_residual_vs_mass.GetXaxis().SetTitle('V#gamma Mass [TeV]')
       h_fit_residual_vs_mass.GetXaxis().SetLabelOffset(1000)
       h_fit_residual_vs_mass.GetXaxis().SetNoExponent()
       h_fit_residual_vs_mass.GetXaxis().SetMoreLogLabels()    
@@ -1238,7 +1285,7 @@ if __name__ == '__main__':
       # PAS
       #h_fit_residual_vs_mass.GetXaxis().SetTitle('Dijet Mass [TeV]')
       # paper
-      h_fit_residual_vs_mass.GetXaxis().SetTitle('Dijet mass [TeV]')
+      h_fit_residual_vs_mass.GetXaxis().SetTitle('V#gamma Mass [TeV]')
       h_fit_residual_vs_mass.GetXaxis().SetLabelOffset(1000)
       #h_fit_residual_vs_mass.GetXaxis().SetNoExponent()
       #h_fit_residual_vs_mass.GetXaxis().SetMoreLogLabels()    
@@ -1311,7 +1358,7 @@ if __name__ == '__main__':
               lastX = g_signal_residual.GetX()[i]
               lastY = g_signal_residual.GetY()[i]
       g_signal_residuals.append(g_signal_residual)
-      g_signal_residual.Draw("cxsame")
+#draw signal in the lower box      g_signal_residual.Draw("cxsame")
 
   
   #c.RedrawAxis() # request from David
@@ -1320,6 +1367,18 @@ if __name__ == '__main__':
   c.Print(options.outDir+"/fit_mjj_%s_%s.C"%(fitRegion.replace(',','_'),box))
   tdirectory.cd()
   c.Write()
+
+
+  
+  myCanvas1 = rt.TCanvas("myCanvas1", "myCanvas1",1)
+  myCanvas1.SetLogy()
+  myFrame1 = ak08_photon_mass.frame(rt.RooFit.Bins(40),rt.RooFit.Title("Pass sample")) #(w.var('mjj')).frame()
+  #background_pdf.plotOn(myFrame1)
+  #dataSet.plotOn(myFrame1)#, rt.SetLineColor(2))
+  myFrame1.Draw()
+  background.Draw("SAME")
+  myCanvas1.SaveAs("mio1.png")
+
   
 
   outFileName = "DijetFitResults_%s.root"%(box)

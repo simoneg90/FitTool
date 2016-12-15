@@ -53,8 +53,8 @@ void drawLimitsPlot(std::string tau21="020"){
       tree[counter]->GetEntry(i);
       //std::cout<<"limit: "<<limit<<std::endl;
       //std::cout<<"mass: "<<mh<<std::endl;
-      if(i==0) oneSigmaLow=limit;
-      if(i==1) twoSigmaLow=limit;
+      if(i==0) twoSigmaLow=limit;
+      if(i==1) oneSigmaLow=limit;
       if(i==2) expected=limit;
       if(i==3) oneSigmaHigh=limit;
       if(i==4) twoSigmaHigh=limit;
@@ -63,15 +63,15 @@ void drawLimitsPlot(std::string tau21="020"){
 
     }
     std::cout<<"Mass: "<<mh<<std::endl;
-    std::cout<<observed<<" "<<twoSigmaLow<<" "<<oneSigmaLow<<" "<<expected<<" "<<oneSigmaHigh<<" "<<twoSigmaHigh<<std::endl;
+    std::cout<<"obs: "<<observed<<" 2sig: "<<twoSigmaLow<<" 1sig: "<<oneSigmaLow<<" exp: "<<expected<<" 1sig: "<<oneSigmaHigh<<" 2sig: "<<twoSigmaHigh<<std::endl;
     outputList<<mh<<" "<<tau21.c_str()<<" "<<observed<<" "<<twoSigmaLow<<" "<<oneSigmaLow<<" "<<expected<<" "<<oneSigmaHigh<<" "<<twoSigmaHigh<<std::endl;
     
     limitMassExp->SetPoint(counter, mass, expected);
     limitMassObs->SetPoint(counter, mass, observed);
     limitMass1Sigma->SetPoint(counter, mass, expected);
-    limitMass1Sigma->SetPointError(counter,0,0, oneSigmaLow, oneSigmaHigh);
+    limitMass1Sigma->SetPointError(counter,0,0, expected-oneSigmaLow, oneSigmaHigh-expected);
     limitMass2Sigma->SetPoint(counter, mass, expected);
-    limitMass2Sigma->SetPointError(counter,0,0, twoSigmaLow, twoSigmaHigh);
+    limitMass2Sigma->SetPointError(counter,0,0, expected-twoSigmaLow, twoSigmaHigh-expected);
 
     ++counter;
   }
@@ -84,23 +84,61 @@ void drawLimitsPlot(std::string tau21="020"){
   limitMass2Sigma->SetFillColor(5);
   limitMass1Sigma->SetFillColor(kGreen-7);
   limitMassExp->SetLineStyle(2);
+  limitMass1Sigma->SetLineStyle(2);
+  limitMass2Sigma->SetLineStyle(2);
+  limitMass1Sigma->SetLineWidth(2);
+  limitMass2Sigma->SetLineWidth(2);
   limitMassObs->SetLineWidth(2);
-  std::cout<<"Creating canvas"<<std::endl;
   TCanvas *c = new TCanvas("c","Limits Mass Spectrum", 1);
+  limitMassExp->GetXaxis()->SetTitle("resonance mass [GeV]");
+  limitMass1Sigma->GetXaxis()->SetTitle("resonance mass [GeV]");
+  limitMass2Sigma->GetXaxis()->SetTitle("resonance mass [GeV]");
+  std::cout<<"Creating canvas"<<std::endl;
+  
   limitMassExp->GetYaxis()->SetRangeUser(.1,10000);
   c->SetLogy();
+  TLegend *leg = new TLegend(0.7,0.7,0.9,0.9);
+  leg->AddEntry((TObject*)0, "95\% C.L.", "");
+  leg->AddEntry(limitMassExp, "Exp.", "l");
+  leg->AddEntry(limitMass1Sigma, "1#sigma", "fl");
+  leg->AddEntry(limitMass2Sigma, "2#sigma", "fl");
 
-  //limitGraph->GetYaxis()->SetRangeUser(.1,10000);
-  limitMassExp->GetXaxis()->SetTitle("mass [GeV]");
+  //limitMassExp->GetXaxis()->SetTitle("mass [GeV]");
   limitMassExp->GetYaxis()->SetTitle("limit");
   //limitMass2Sigma->Draw("ZAP");
   //limitMassObs->Draw("PSAME");
   //limitMass2Sigma->Draw("a3SAME");
   //limitMass1Sigma->Draw("a3SAME");
-  limitMassExp->Draw("ZAP");
+//  limitMassExp->GetYaxis()->SetRangeUser(-1.,.01);
+  limitMassExp->Draw("AP");
   limitGraph->Draw("a3");
   limitMassExp->Draw("LSAME");
   limitMassObs->Draw("CSAME");
+  leg->Draw("SAME");
+  limitGraph->GetXaxis()->SetTitle("resonance mass [GeV]");
+  limitGraph->GetYaxis()->SetTitle("#sigma[pb]");
+
+  TLatex latex;
+  TString lumiText = "36 fb^{-1} (13 TeV)";//"#it{L}=12.9 fb^{-1} (2016) (13 TeV)";//"#bf{CMS Preliminary} #it{L}=12.9 fb^{-1}";
+  TString cmsLogo = "#bf{CMS}  #it{Preliminary}";
+  latex.SetNDC();
+  latex.SetTextAngle(0);
+  latex.SetTextColor(kBlack);    
+  latex.SetTextFont(42);
+  latex.SetTextAlign(31); 
+  float lumiTextOffset = 0.2;
+  float lumiTextSize = 0.035;
+  latex.SetTextSize(lumiTextSize);    
+  latex.DrawLatex(.84,.96,lumiText);//1-r,1-t+lumiTextOffset*t,lumiText);
+  latex.DrawLatex(.44/*.25*/,.96,cmsLogo);
+  latex.Draw();
+
+  TGaxis::SetMaxDigits(2);
+
+  gPad->Modified();
+  gPad->Update();
+  c->Modified();
+  c->Update();
   std::cout<<"Saving output"<<std::endl;
   replace( tau21.begin(), tau21.end(), '.', 'p' );
   c->SaveAs(Form("limits_%s.pdf",tau21.c_str()));

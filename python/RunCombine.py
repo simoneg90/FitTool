@@ -241,19 +241,19 @@ def main(options,args):
         massPoints = options.mass.split("_")
         for massPoint in massPoints:#massIterable(options.mass):
             print "Mass points: ", massPoint, " in ", massPoints
-            print model
-            print massPoint
-            print options.inputFitFile
-            print 1000*lumi
-            print options.config
-            print box
-            print options.outDir
-            print signalDsName
-            print backgroundDsName[box]
-            print penaltyString
-            print signalSys
-            print xsecString
-            print decoString
+            print "model ", model
+            print "mass point ", massPoint
+            print "input file ", options.inputFitFile
+            print "lumi ", 1000*lumi
+            print "config ", options.config
+            print "box ", box
+            print "outFolder ", options.outDir
+            print "signalDsName ", signalDsName
+            print "bakground signal shape ", backgroundDsName[box]
+            print "penalty string ", penaltyString
+            print "signal sys ", signalSys
+            print "xsec string ", xsecString
+            print "deco string ", decoString
             print "Command: python python/WriteDataCard.py -m %s --mass %s -i %s -l %f -c %s -b %s -d %s %s %s %s %s %s %s"%(model, massPoint, options.inputFitFile,1000*lumi,options.config,box,options.outDir,signalDsName,backgroundDsName[box],penaltyString,signalSys,xsecString,decoString)
             luminosity = ("%.3f"%(lumi)).replace('.','p')
             exec_me('python python/WriteDataCard.py -m %s --mass %s -i %s -l %f -c %s -b %s -d %s %s %s %s %s %s %s'%(model, massPoint, options.inputFitFile,1000*lumi,options.config,box,options.outDir,signalDsName,backgroundDsName[box],penaltyString,signalSys,xsecString,decoString),options.dryRun)    

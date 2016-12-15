@@ -377,8 +377,8 @@ if __name__ == '__main__':
     for f in args:
         print "f.lower(): ", f.lower()
         if f.lower().endswith('.root'):
-            if f.lower().find('resonanceshapes')!=-1:
-                print "Found resonanceshapes in rootfile"
+            if f.lower().find('signal')!=-1:#('resonanceshapes')!=-1:
+                print "Found resonanceshapes in rootfile ", f
                 signalFileName = f
             else:
                 print "Not found resonanceshapes in rootfile"
