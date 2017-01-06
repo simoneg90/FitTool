@@ -1,6 +1,7 @@
 
 
 #define nMasses 20
+#define lumi 20000 #luminosity pb-1
 void drawLimitsPlot(std::string tau21="020"){
 
   std::cout<<"Entering in drawLimitsPlot program"<<std::endl;
@@ -23,7 +24,8 @@ void drawLimitsPlot(std::string tau21="020"){
   TGraph *limitMassExp = new TGraph(0);
   TGraphAsymmErrors *limitMass1Sigma = new TGraphAsymmErrors(0);
   TGraphAsymmErrors *limitMass2Sigma = new TGraphAsymmErrors(0);
-
+  TGraph *nEvtsObs = new TGraph(0);
+  TGraph *nEvtsExp = new TGraph(0);
   std::string fileName="";
 
   std::ofstream outputList;
@@ -47,6 +49,9 @@ void drawLimitsPlot(std::string tau21="020"){
     tree[counter] = (TTree *)inputFiles[counter]->Get("limit");
     nentries = tree[counter]->GetEntries();
     std::cout<<"Entries: "<<nentries<<std::endl;
+    if (nentries<6){
+      continue;
+    }
     tree[counter]->SetBranchAddress("limit",&limit);
     tree[counter]->SetBranchAddress("mh",&mh);
     for(int i=0; i<nentries; ++i){
@@ -72,6 +77,9 @@ void drawLimitsPlot(std::string tau21="020"){
     limitMass1Sigma->SetPointError(counter,0,0, expected-oneSigmaLow, oneSigmaHigh-expected);
     limitMass2Sigma->SetPoint(counter, mass, expected);
     limitMass2Sigma->SetPointError(counter,0,0, expected-twoSigmaLow, twoSigmaHigh-expected);
+
+    nEvtsExp->SetPoint(counter, mass, expected*lumi);
+    nEvtsObs->SetPoint(counter, mass, observed*lumi);
 
     ++counter;
   }
@@ -144,6 +152,30 @@ void drawLimitsPlot(std::string tau21="020"){
   c->SaveAs(Form("limits_%s.pdf",tau21.c_str()));
 
 
+
+  TCanvas *c1 = new TCanvas("c1","# events Spectrum", 1);
+  nEvtsExp->GetXaxis()->SetTitle("resonance mass [GeV]");
+  std::cout<<"Creating canvas for nEvents"<<std::endl;
+  
+  nEvtsExp->GetYaxis()->SetRangeUser(.1,10000);
+  c1->SetLogy();
+  TLegend *leg1 = new TLegend(0.7,0.7,0.9,0.9);
+  leg1->AddEntry(nEvtsExp, "Exp.", "l");
+  leg1->AddEntry(nEvtsObs, "Obs.", "l");
+
+  nEvtsExp->GetYaxis()->SetTitle("#Evts");
+  nEvtsExp->Draw("AP");
+  nEvtsObs->Draw("CSAME");
+  leg1->Draw("SAME");
+  latex.Draw();
+  TGaxis::SetMaxDigits(2);
+  gPad->Modified();
+  gPad->Update();
+  c1->Modified();
+  c1->Update();
+  std::cout<<"Saving output"<<std::endl;
+  replace( tau21.begin(), tau21.end(), '.', 'p' );
+  c1->SaveAs(Form("nEvents_%s.pdf",tau21.c_str()));
 
   return;
 

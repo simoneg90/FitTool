@@ -12,11 +12,41 @@ import sys
 import math
 
 #gSystem.Load("/cmshome/gellisim/CMSSW_7_4_14/src/FitTool/src/RooDCBShape_cxx.so")
+def drawBiasPlot(biasRootFile, outDir, funcName1, funcName2, suff=""):
+  fileBias = TFile.Open(biasRootFile)
+  histoBias = TH1F("histoBias", "histoBias", 20,-4,4)
+  fileBias.tree_fit_sb.Project(histoBias.GetName(),"(mu-1)/muErr")
+  gausFunction = TF1("gausFunction", "gaus(0)", -4.,4.)
+  print "Setting gaus parameters: mean ", histoBias.GetMean(), " sigma ", histoBias.GetRMS(), "norm ", histoBias.Integral() 
+  gausFunction.SetParameters(histoBias.Integral(), histoBias.GetMean(), histoBias.GetRMS())
+  histoBias.Fit(gausFunction, "R+")
+  counter = 0
+  thisNorm = -999.
+  thisMean = -999.
+  thisSigma = -999.
+  maxIterations = 3
+
+  while ( (abs((gausFunction.GetParameter(1)- thisMean)/(gausFunction.GetParameter(1)+1.))>0.001) and (abs((gausFunction.GetParameter(2) - thisSigma ) / (gausFunction.GetParameter(2)+1) ) > 0.001) and (counter < maxIterations) ): #+1 at denominator prevent crashes when runnin on the asimov with no signal
+    thisNorm = gausFunction.GetParameter(0)
+    thisMean = gausFunction.GetParameter(1)
+    thisSigma = gausFunction.GetParameter(2)
+    gausFunction.SetParameters(thisNorm, thisMean, thisSigma)
+    gausFunction.SetRange(thisMean - 2.*thisSigma, thisMean + 2.*thisSigma)
+    histoBias.Fit(gausFunction, "R+")
+    counter += 1
+
+  print "Gauss fit exited after %i iterations"%(counter)
+  c_bias = TCanvas("c_bias", "c_bias", 1)
+  histoBias.Draw()
+  c_bias.SaveAs("%s/bias_histogram_%s_%s%s.pdf"%(outDir, funcName1, funcName2, suff))
+  histoBias.Delete()
+
+  return
 
 def prepareBiasDatacard (workspace, fit_result_fileName, outDir, mass, dataset, realVar, rangeMin, rangeMax):
   
   
-  nFunctions = 5  
+  nFunctions = 4  
   dijet_p1 = RooRealVar("dijet_p1", "dijet_p1", -13., -15., -9.)
   dijet_p2 = RooRealVar("dijet_p2", "dijet_p2", -1.4, -2., -1.)
   dijet_p3 = RooRealVar("dijet_p3", "dijet_p3", .2,0.01,10.)
@@ -76,8 +106,23 @@ def prepareBiasDatacard (workspace, fit_result_fileName, outDir, mass, dataset, 
   c_bias.SaveAs("%s/bias_fitPlot_m%s.pdf"%(outDir, str(mass)))
   
   cat = RooCategory ("pdf_index","Index of Pdf which is active")
-  multiPdf = RooMultiPdf ("multiPdf","All Pdfs for bias study",cat,RooArgList(dijet_function,expLaw1_function,expLaw2_function,atlas1_function,atlas2_function))
+  multiPdf = RooMultiPdf ("multiPdf","All Pdfs for bias study",cat,RooArgList(dijet_function,expLaw1_function,expLaw2_function,atlas1_function))
   norm = RooRealVar ("multiPdf_norm","Number of background events",0,20000)
+
+  dijet_p1.setConstant(True) 
+  dijet_p2.setConstant(True) 
+  dijet_p3.setConstant(True) 
+  expLaw1_p1.setConstant(True)
+  expLaw1_p2.setConstant(True)
+  expLaw2_p1.setConstant(True)
+  expLaw2_p2.setConstant(True)
+  expLaw2_p3.setConstant(True)
+  expLaw2_p4.setConstant(True)
+  atlas1_p1.setConstant(True)
+  atlas1_p2.setConstant(True)
+  atlas1_p3.setConstant(True)
+  norm.setConstant(True)
+
 
   WS_bias = RooWorkspace("WS_bias")#, kTRUE)
   rootTools.Utils.importToWS(WS_bias, cat)
@@ -89,17 +134,36 @@ def prepareBiasDatacard (workspace, fit_result_fileName, outDir, mass, dataset, 
 #  bias_fileName = "%s/datacard_bias_%s.root"%(outDirName,str(options.res_mass))
   WS_bias.SaveAs("%s/WS_bias_%s.root"%(outDirName,str(options.res_mass)))
 
-  bias_dataCardName = writeCard(workspace, mass, fit_result_fileName, outDirName, True, WS_bias.GetName(), root_biasName, suffix="_bias")
+  bias_dataCardName = writeCard(workspace, mass, fit_result_fileName, outDirName, False, True, WS_bias.GetName(), root_biasName, suffix="_bias")
 
 
   return bias_dataCardName, nFunctions, root_biasName
 
 def doBias(workspace, fit_result_fileName, outDir, datacardFileName, mass, rangeVarLow, rangeVarHigh, mVg, dataSet, nToys=100, expectSignal=1.):
 
+  #note: to do a 0 nExpected bias study, use nExpected=0.000001
   bias_datacard, nFs, bias_rootFile = prepareBiasDatacard(workspace, fit_result_fileName, outDir, mass, dataSet, mVg, rangeVarLow, rangeVarHigh)
   myPrint("Doing Bias test", "*")
-  #os.system("combine -M GenerateOnly %s -n %s --toysFrequentist --saveToys --expectSignal %s -t %s -m %s"%(datacardFileName, "bias", str(expectSignal), str(nToys), str(mass)))
-  #os.system("combine -M MaxLikelihoodFit %s -n %s --toysFile higgsCombine%s.GenerateOnly.mH120.123456.root -t %s -m %s --minimizerTolerance 0.01 --minimizerStrategy 2 --saveWorkspace"%(datacardFileName, "biasMaxLikelihood", "bias", str(nToys), str(mass)))
+  print "Datacard bias name: ", bias_datacard
+  function_list = ['dijet', 'expLaw1', 'expLaw2', 'atlas']
+  
+  for i in range(0, nFs):
+
+    os.system("combine %s -M GenerateOnly --setPhysicsModelParameters pdf_index=%s --toysFrequentist -t %s --expectSignal %s --saveToys -m %s -n %s --freezeNuisances pdf_index"%(bias_datacard, str(i), str(nToys), str(expectSignal), str(mass), "bias_"+function_list[i]+"_expected"+str(expectSignal).replace('.','p')+"_nToys"+str(nToys)))
+    os.system("mv higgsCombine%s.GenerateOnly.mH%s.123456.root %s/higgsCombine%s.GenerateOnly.mH%s.123456.root"%("bias_"+function_list[i]+"_expected"+str(expectSignal).replace('.','p')+"_nToys"+str(nToys), str(mass), outDir, "bias_"+function_list[i]+"_expected"+str(expectSignal).replace('.','p')+"_nToys"+str(nToys), str(mass)))
+    for j in range(0, nFs):
+      os.system("combine %s -M MaxLikelihoodFit  --setPhysicsModelParameters pdf_index=%s --toysFile %s/higgsCombine%s.GenerateOnly.mH%s.123456.root  -t %s --rMin -10 --rMax 10 -n %s -m %s --expectSignal %s --freezeNuisances pdf_index --plots"%(bias_datacard, str(j), outDir, "bias_"+function_list[i]+"_expected"+str(expectSignal).replace('.','p')+"_nToys"+str(nToys), str(mass), str(nToys), "toyF_"+function_list[i]+"_fitF_"+function_list[j]+"_expected"+str(expectSignal).replace('.','p')+"_nToys"+str(nToys), str(mass), str(expectSignal)))
+      os.system("mv higgsCombine%s.MaxLikelihoodFit.mH%s.123456.root %s/higgsCombine%s.GenerateOnly.mH%s.123456.root"%("toyF_"+function_list[i]+"_fitF_"+function_list[j]+"_expected"+str(expectSignal).replace('.','p')+"_nToys"+str(nToys), str(mass), outDir, "toyF_"+function_list[i]+"_fitF_"+function_list[j]+"_expected"+str(expectSignal).replace('.','p')+"_nToys"+str(nToys), str(mass)))
+      os.system("mv mlfit%s.root %s/mlfit%s.root"%("toyF_"+function_list[i]+"_fitF_"+function_list[j]+"_expected"+str(expectSignal).replace('.','p')+"_nToys"+str(nToys), outDir, "toyF_"+function_list[i]+"_fitF_"+function_list[j]+"_expected"+str(expectSignal).replace('.','p')+"_nToys"+str(nToys)))
+      drawBiasPlot("%s/mlfit%s.root"%(outDir, "toyF_"+function_list[i]+"_fitF_"+function_list[j]+"_expected"+str(expectSignal).replace('.','p')+"_nToys"+str(nToys)), outDir, function_list[i], function_list[j], "_expected"+str(expectSignal).replace('.','p')+"_nToys"+str(nToys))
+
+      os.system("mv ./WS_Vg_prefit.png %s/WS_Vg_prefit_%s.png"%(outDir, "toyF_"+function_list[i]+"_fitF_"+function_list[j]+"_expected"+str(expectSignal).replace('.','p')+"_nToys"+str(nToys)))
+      os.system("mv ./covariance_fit_b.png %s/covariance_fit_b_%s.png"%(outDir, "toyF_"+function_list[i]+"_fitF_"+function_list[j]+"_expected"+str(expectSignal).replace('.','p')+"_nToys"+str(nToys)))
+      os.system("mv ./WS_Vg_fit_b.png %s/WS_Vg_fit_b_%s.png"%(outDir, "toyF_"+function_list[i]+"_fitF_"+function_list[j]+"_expected"+str(expectSignal).replace('.','p')+"_nToys"+str(nToys)))
+      os.system("mv ./WS_Vg_fit_s.png %s/WS_Vg_fit_s_%s.png"%(outDir, "toyF_"+function_list[i]+"_fitF_"+function_list[j]+"_expected"+str(expectSignal).replace('.','p')+"_nToys"+str(nToys)))
+      os.system("mv ./covariance_fit_s.png %s/covariance_fit_s_%s.png"%(outDir, "toyF_"+function_list[i]+"_fitF_"+function_list[j]+"_expected"+str(expectSignal).replace('.','p')+"_nToys"+str(nToys)))
+#    os.system("combine -M GenerateOnly %s -n %s --toysFrequentist --saveToys --expectSignal %s -t %s -m %s"%(datacardFileName, "bias", str(expectSignal), str(nToys), str(mass)))
+#    os.system("combine -M MaxLikelihoodFit %s -n %s --toysFile higgsCombine%s.GenerateOnly.mH120.123456.root -t %s -m %s --minimizerTolerance 0.01 --minimizerStrategy 2 --saveWorkspace"%(datacardFileName, "biasMaxLikelihood", "bias", str(nToys), str(mass)))
 
 
   return
@@ -245,13 +309,13 @@ def runCombine(mass, fileName, outDir, doAsimov=False, isBlinded=False):
 #  os.system("combine -M Asymptotic %s"%(fileName)) #--verbose 9"%(str(mass), fileName)) #-m mass not used as for high resonances does not seem to work
 #  os.system("combine -M Asymptotic -m %s -t 0 --rMin=0 --rMax=0.004 %s"%(str(mass), fileName))
   myPrint("Throwing asimov with MaxLikelihood fit")
-  os.system("combine -M MaxLikelihoodFit -m %s -t 1 --expectSignal=1 %s --plots"%(str(mass), fileName)) #throw the Asimov to see the signal in the bkg distribution and test the fit
+  os.system("combine -M MaxLikelihoodFit -m %s -t -1 --expectSignal=1 %s --plots"%(str(mass), fileName)) #throw and use the Asimov to see the signal in the bkg distribution and test the fit
   print "Moving asimov output in right directory"
   os.system("mv ./WS_Vg_prefit.png %s/WS_Vg_prefit.png"%(outDir))
   os.system("mv ./covariance_fit_b.png %s/covariance_fit_b.png"%(outDir))
   os.system("mv ./WS_Vg_fit_b.png %s/WS_Vg_fit_b.png"%(outDir))
   os.system("mv ./WS_Vg_fit_s.png %s/WS_Vg_fit_s.png"%(outDir))
-  os.system("mv ./covariance_fit_s.png %s/covariance_fit_.png"%(outDir))
+  os.system("mv ./covariance_fit_s.png %s/covariance_fit_s.png"%(outDir))
   os.system("mv ./mlfit.root %s/mlfit.root"%(outDir))
   os.system("mv ./higgsCombineTest.MaxLikelihoodFit.mH%s.123456.root %s/higgsCombineTest.MaxLikelihoodFit.mH%s.123456.root"%(str(mass), outDir, str(mass)))
   myPrint("First combine attempt")
@@ -274,7 +338,7 @@ def runCombine(mass, fileName, outDir, doAsimov=False, isBlinded=False):
   os.system("mv %s %s/%s"%(combineFileName, outDir, combineFileName))
   return
 
-def writeCard(workspaceName, mass, fit_result_fileName, outDirName, isBiasCard=False, biasWS=None, bias_fileName=None, suffix=""):
+def writeCard(workspaceName, mass, fit_result_fileName, outDirName, setConst, isBiasCard=False, biasWS=None, bias_fileName=None, suffix=""):
 #  obsRate = workspace.data("data_obs").sumEntries()
   #dataCardRootFileName = "datacard_m%d_VGamma.root" % (mass)
   dataCardFileName = "%s/datacard_m%d_VGamma%s.txt" % (outDirName,mass, suffix)
@@ -287,6 +351,9 @@ def writeCard(workspaceName, mass, fit_result_fileName, outDirName, isBiasCard=F
   bkg_functionName = ""
   pdf_index = ' '
   pdf_par = ' '
+  last_bracket = [' ', ' ', ' ', ' ']
+  last_bracket1 = [' ', ' ', ' ', ' ']
+  last_bracket2 = [' ', ' ', ' ', ' ']
   if isBiasCard:
     bias_file = TFile.Open(bias_fileName)
     bkg_fileName = bias_fileName
@@ -294,40 +361,46 @@ def writeCard(workspaceName, mass, fit_result_fileName, outDirName, isBiasCard=F
     bkg_functionName = "multiPdf"
     pdf_index = 'pdf_index'
     pdf_par = 'discrete'
+    last_bracket = [pdf_index, pdf_par, ' ', ' ']
   else:
     bkg_fileName = fit_result_fileName
     backgroundWS = workspace
     bkg_functionName = "bg_function"
+    if not setConst:
+      last_bracket  = [workspace.var("bg_p1").GetName(), 'flatParam', ' ', ' ']
+      last_bracket1 = [workspace.var("bg_p2").GetName(), 'flatParam', ' ', ' ']
+      last_bracket2 = [workspace.var("bg_p3").GetName(), 'flatParam', ' ', ' ']
+                     
+    else:
+      last_bracket = [' ', ' ', ' ', ' ']
 
+  
   signalRate = workspace.data("signal_exp_%d"%(mass)).sumEntries()
   divider = "-------------"
   dataCard = [['imax', '1', 'number of channels', ' ', ' '], 
-            ['jmax', '*', 'number of backgrounds', ' ', ' '], 
-            ['kmax', '*', 'number of systematic uncertainty sources', ' ', ' '],
-            [divider, ' ', ' ',' ', ' '],
-            ['shapes sig',workspace.GetName(),fit_result_fileName,workspace.GetName()+':'+workspace.pdf("signal_f").GetName(), workspace.GetName()+':'+workspace.pdf("signal_f").GetName()+"_$SYSTEMATIC"],
-#            ['shapes sig',workspace.GetName(),fit_result_fileName,workspace.GetName()+':'+workspace.data("signal_exp_%d"%(mass)).GetName(), ' '],
-            ['shapes allgJ',workspace.GetName(),fit_result_fileName,workspace.GetName()+':'+workspace.pdf("mc_function").GetName(), workspace.GetName()+':'+workspace.pdf("mc_function").GetName()+"_$SYSTEMATIC"],
-            #['shapes bkg', workspace.GetName(),fit_result_fileName, workspace.GetName()+':'+workspace.pdf("bg_function").GetName(),' '],
-            ['shapes bkg', backgroundWS.GetName(),bkg_fileName, backgroundWS.GetName()+':'+backgroundWS.pdf(bkg_functionName).GetName(),' '],
-            #['shapes signal',workspace.GetName(),fit_result_fileName,workspace.GetName()+':'+workspace.pdf("dcb_normalised").GetName()],
-            #['shapes background', workspace.GetName(),fit_result_fileName, workspace.GetName()+':'+workspace.pdf("bg_function_normalised").GetName()],
-            ['shapes data_obs', workspace.GetName(), fit_result_fileName, workspace.GetName()+':'+workspace.data("data_obs").GetName(), ' '],
-            [divider, ' ', ' ',' ',' '],
-            ['### Observation', ' ', ' ',' ',' '],
-            ['bin', workspace.GetName(), ' ', ' ',' '],
-    #        ['observation',str(obsRate), ' ', ' '],
-            ['observation','-1', ' ', ' ',' '],
-            [divider, ' ', ' ',' ',' '],
-            ['bin', ' ', workspace.GetName(), workspace.GetName(),workspace.GetName()],
-            ['process', ' ','sig', 'allgJ','bkg'],
-            ['process', ' ','0', '1','2'],
-            ['rate', ' ', '1','1','1'],
-            ['cms_lumi_13TeV', 'lnN', '1.027', '1.027','-'],
-            [pdf_index, pdf_par, ' ', ' ', ' '],
-            #[workspace.var("bg_function_norm").GetName(),  'flatParam',' ', ' '],
-            #[workspace.function("dcb_norm").GetName(),  'flatParam',' ', ' ']
-    ]
+            ['jmax', '*', 'number of backgrounds', ' ', ' '],                                                                                                                                                      #  dataCard = [['imax', '1', 'number of channels', ' ', ' '], 
+            ['kmax', '*', 'number of systematic uncertainty sources', ' ', ' '],                                                                                                                                   #            ['jmax', '*', 'number of backgrounds', ' ', ' '], 
+            [divider, ' ', ' ',' ', ' '],                                                                                                                                                                          #            ['kmax', '*', 'number of systematic uncertainty sources', ' ', ' '],
+            ['shapes sig',workspace.GetName(),fit_result_fileName,workspace.GetName()+':'+workspace.pdf("signal_f").GetName(), workspace.GetName()+':'+workspace.pdf("signal_f").GetName()+"_$SYSTEMATIC"],        #            [divider, ' ', ' ',' ', ' '],
+            ['shapes bkg', workspace.GetName(),bkg_fileName, backgroundWS.GetName()+':'+backgroundWS.pdf(bkg_functionName).GetName(),' '],                                                                         #            #['shapes bkg', workspace.GetName(),fit_result_fileName, workspace.GetName()+':'+workspace.pdf("bg_function").GetName(),' '],
+            ['shapes data_obs', workspace.GetName(), fit_result_fileName, workspace.GetName()+':'+workspace.data("data_obs").GetName(), ' '],                                                                      #            #['shapes background', workspace.GetName(),fit_result_fileName, workspace.GetName()+':'+workspace.pdf("bg_function_normalised").GetName()],
+            [divider, ' ', ' ',' ',' '],                                                                                                                                                                           #            ['shapes data_obs', workspace.GetName(), fit_result_fileName, workspace.GetName()+':'+workspace.data("data_obs").GetName(), ' '],
+            ['### Observation', ' ', ' ',' ',' '],                                                                                                                                                                 #            [divider, ' ', ' ',' ',' '],
+            ['bin', workspace.GetName(), ' ', ' ',' '],                                                                                                                                                            #            ['### Observation', ' ', ' ',' ',' '],
+    #        ['observation',str(obsRate), ' ', ' '],                                                                                                                                                               #            ['bin', workspace.GetName(), ' ', ' ',' '],
+            ['observation','-1', ' ', ' ',' '],                                                                                                                                                                    #    #        ['observation',str(obsRate), ' ', ' '],
+            [divider, ' ', ' ',' ',' '],                                                                                                                                                                           #            ['observation','-1', ' ', ' ',' '],
+            ['bin', ' ', workspace.GetName(), workspace.GetName()],                                                                                                                            #            [divider, ' ', ' ',' ',' '],
+            ['process', ' ','sig', 'bkg'],                                                                                                                                                                 #            ['bin', ' ', workspace.GetName(), workspace.GetName(),workspace.GetName()],
+            ['process', ' ','0', '1'],                                                                                                                                                                         #            ['process', ' ','sig', 'allgJ','bkg'],
+            ['rate', ' ', '1','1'],                                                                                                                                                                            #            ['process', ' ','0', '1','2'],
+            ['cms_lumi_13TeV', 'lnN', '1.027', '-'],                                                                                                                                                       #            ['rate', ' ', '1','1','1'],
+            last_bracket,
+            last_bracket1,
+            last_bracket2,
+            #[pdf_index, pdf_par, ' ', ' '],                                                                                                                                                                   #            ['cms_lumi_13TeV', 'lnN', '1.027', '1.027','-'],
+    ]                                                                                                                                                                                                              #            #[workspace.function("dcb_norm").GetName(),  'flatParam',' ', ' ']
+#    ]
 #  dataCard = [['imax', '1', 'number of channels', ' '],
 #          ['jmax', '1', 'number of backgrounds', ' '], 
 #          ['kmax', '*', 'number of systematic uncertainty sources', ' '],
@@ -392,9 +465,9 @@ def myPrint(string, symbol="+"):
   print frame,"\n"
 
 
-def importRooDataset(inFile, realVar, outName):
+def importRooDataset(inFile, realVar, outName, treeName):
   print "Entering in importRooDataset function"
-  ttree= inFile.Get("mio")
+  ttree= inFile.Get(treeName)
   rooDS = RooDataSet(outName, outName, RooArgSet(realVar), RooFit.Import(ttree))
 
   return rooDS
@@ -498,9 +571,14 @@ if __name__ == '__main__':
       help="do bias test")
   parser.add_option('--nExpected', dest="nExpt", type="float", default=1.,
       help="n expected for bias toys")
+  parser.add_option('--treeName', dest="treeName", type="string", default="mio",
+      help="roodataset tree name")
+  parser.add_option('--setConstant', dest="setConst", default=False, action='store_true',
+      help="set all the fit parameters constant. If false, the datacard will have the bkg parameters set as FLATPARAM")
 
   (options,args) = parser.parse_args()
 
+  
   outDirName=options.outDir+'_m'+str(options.res_mass)
   if options.runCombine:
     dataCardName = "%s/datacard_m%d_VGamma.txt" % (outDirName,options.res_mass)
@@ -522,6 +600,7 @@ if __name__ == '__main__':
   os.system('mkdir -p %s'%(outDirName))
   rangeVarLow = 600
   rangeVarHigh = 4000
+  bins = (rangeVarHigh-rangeVarLow)/40
 
   myPrint("Analysing background")
   if not fileInput:
@@ -534,7 +613,7 @@ if __name__ == '__main__':
     #print "Found binned file"
     dataHist = importRooDatahist(fileInput, mVg, options.histoName)
   else:
-    dataSet = importRooDataset(fileInput, mVg, "data_obs")
+    dataSet = importRooDataset(fileInput, mVg, "data_obs", options.treeName)
 
 
   if options.doBias:
@@ -570,13 +649,13 @@ if __name__ == '__main__':
 
   rangeLow, rangeHigh = getGoodRange(dataBinned, mVg, True)
 
-  fr = bg_function_normalised.fitTo(dataSet, RooFit.Range(rangeLow, rangeHigh), RooFit.Strategy(2))
-  bg_function.fitTo(dataSet, RooFit.Range(rangeLow, rangeHigh), RooFit.Strategy(2))
+  fr = bg_function_normalised.fitTo(dataSet, RooFit.Range(rangeLow, rangeHigh))#, RooFit.Strategy(2))
+  bg_function.fitTo(dataSet, RooFit.Range(rangeLow, rangeHigh))#, RooFit.Strategy(2))
 
 
 #  pdf.Print("v")
-  frameBkg = mVg.frame()
-  frameBkgPull = mVg.frame()
+  frameBkg = mVg.frame(RooFit.Bins(bins))
+  frameBkgPull = mVg.frame(RooFit.Bins(bins))
   
   #rootTools.Utils.importToWS(WS_Vg,fr)
 #  fr = doBinnedFit(pdf, dataSet, 600, 3000)
@@ -586,7 +665,7 @@ if __name__ == '__main__':
   #print "----------> ", pdf.getVal(nset)
   #print "----------> ", pdf.getVal()
   bkgPull = frameBkg.pullHist()
-  pullBkgHisto = convertToTH1F(bkgPull, nBins, xLow, xHigh)
+  pullBkgHisto = convertToTH1F(bkgPull, bins, xLow, xHigh)#nBins, xLow, xHigh)
   frameBkgPull.addPlotable(bkgPull,"H")#, SetFillColor(kOrange), SetLineWidth(2), SetLineColor(kBlack))
 
   c_bkg = TCanvas("c_bkg","c_bkg",1)
@@ -674,12 +753,12 @@ if __name__ == '__main__':
 
   #dcb_normalised = RooAddPdf("dcb_normalised",dcb, dcb_norm)
 
-  fr1 = dcb_normalised.fitTo(signalHist, RooFit.Range(rangeLow, rangeHigh), RooFit.Strategy(2))
-  dcb.fitTo(signalHist, RooFit.Range(rangeLow, rangeHigh), RooFit.Strategy(2))
+  fr1 = dcb_normalised.fitTo(signalHist, RooFit.Range(rangeLow, rangeHigh))#, RooFit.Strategy(2))
+  dcb.fitTo(signalHist, RooFit.Range(rangeLow, rangeHigh))#, RooFit.Strategy(2))
 
-  frameSgn = mVg.frame()
+  frameSgn = mVg.frame(RooFit.Bins(bins))
   frameSgn.SetMaximum(3000)
-  frameSgnPull = mVg.frame()
+  frameSgnPull = mVg.frame(RooFit.Bins(bins))
   
 #  print dcb.getVal()
 #  dcb_norm = dcb.createIntegral(mVg)
@@ -730,7 +809,7 @@ if __name__ == '__main__':
   p_2Sgn.cd()
   #frameSgnPull.Draw()
   gPad.SetGridy()
-  myHisto = convertToTH1F(sgnPull, nBins, xLow, xHigh)
+  myHisto = convertToTH1F(sgnPull, bins, xLow, xHigh)
   myHisto.SetLineColor(kBlack)
   myHisto.SetLineWidth(1)
   myHisto.SetFillColor(kOrange+8)
@@ -761,14 +840,15 @@ if __name__ == '__main__':
   mcHist, nBins, xLow, xHigh = importRooDatahist(signalFileInput, mVg, "allBkgHisto", "mc_exp", 20)
   rangeLow, rangeHigh = getGoodRange(mcHist, mVg, True)
 
-  fr2 = mc_normalised.fitTo(mcHist, RooFit.Range(rangeLow, rangeHigh), RooFit.Strategy(2))
-  mc_p1.setConstant(True)
-  mc_p2.setConstant(True)
-  mc_p3.setConstant(True)
-  mc.fitTo(mcHist, RooFit.Range(rangeLow, rangeHigh), RooFit.Strategy(2))
+  fr2 = mc_normalised.fitTo(mcHist, RooFit.Range(rangeLow, rangeHigh))#, RooFit.Strategy(2))
+  if options.setConst:
+    mc_p1.setConstant(True)
+    mc_p2.setConstant(True)
+    mc_p3.setConstant(True)
+  mc.fitTo(mcHist, RooFit.Range(rangeLow, rangeHigh))#, RooFit.Strategy(2))
 
-  frameMc = mVg.frame()
-  frameMcPull = mVg.frame()
+  frameMc = mVg.frame(RooFit.Bins(bins))
+  frameMcPull = mVg.frame(RooFit.Bins(bins))
    
   mcHist.plotOn(frameMc)
   mc.plotOn(frameMc)#, RooFit.VisualizeError(fr2))
@@ -822,23 +902,24 @@ if __name__ == '__main__':
   bg_function_norm.setVal(dataBinned.sumEntries())
   mc_function_norm.setVal(mcHist.sumEntries())
 
-#  MH.setConstant(True)
-#  sigma.setConstant(True)
-#  dCBCutL.setConstant(True)
-#  dCBCutR.setConstant(True)
-#  dCBPowerL.setConstant(True)
-#  dCBPowerR.setConstant(True)
-#  norm1.setConstant(True)
-#  norm2.setConstant(True)
-#  norm3.setConstant(True)
-##  bg_function_norm.setConstant(True)
-##  mc_function_norm.setConstant(True)
-  bg_p1.setConstant(True)
-  bg_p2.setConstant(True)
-  bg_p3.setConstant(True)
-  mc_p1.setConstant(True)
-  mc_p2.setConstant(True)
-  mc_p3.setConstant(True)
+  if options.setConst:
+  #  MH.setConstant(True)
+  #  sigma.setConstant(True)
+  #  dCBCutL.setConstant(True)
+  #  dCBCutR.setConstant(True)
+  #  dCBPowerL.setConstant(True)
+  #  dCBPowerR.setConstant(True)
+  #  norm1.setConstant(True)
+  #  norm2.setConstant(True)
+  #  norm3.setConstant(True)
+  ##  bg_function_norm.setConstant(True)
+  ##  mc_function_norm.setConstant(True)
+    bg_p1.setConstant(True)
+    bg_p2.setConstant(True)
+    bg_p3.setConstant(True)
+    mc_p1.setConstant(True)
+    mc_p2.setConstant(True)
+    mc_p3.setConstant(True)
 
 
 
@@ -853,9 +934,9 @@ if __name__ == '__main__':
   rootTools.Utils.importToWS(WS_Vg, bg_function_norm)
   rootTools.Utils.importToWS(WS_Vg, signal_f)
   rootTools.Utils.importToWS(WS_Vg, signal_f_norm)
-  rootTools.Utils.importToWS(WS_Vg, mcHist)
-  rootTools.Utils.importToWS(WS_Vg, mc)
-  rootTools.Utils.importToWS(WS_Vg, mc_function_norm)
+#  rootTools.Utils.importToWS(WS_Vg, mcHist)
+#  rootTools.Utils.importToWS(WS_Vg, mc)
+#  rootTools.Utils.importToWS(WS_Vg, mc_function_norm)
   WS_Vg.Print("v")
 
 #  WS_Vg_outFile = TFile.Open("WS_Vg_%i.root"%(options.res_mass), "recreate")
@@ -867,7 +948,7 @@ if __name__ == '__main__':
   signalFileInput.Close()
 #  WS_Vg_outFile.Close()
 
-  dataCardName = writeCard(WS_Vg.GetName(), options.res_mass, "%s/WS_Vg_%i.root"%(outDirName,options.res_mass), outDirName) 
+  dataCardName = writeCard(WS_Vg.GetName(), options.res_mass, "%s/WS_Vg_%i.root"%(outDirName,options.res_mass), outDirName, options.setConst) 
   writeRootDatacard(dataCardName, options.res_mass)
 #  runCombine(options.res_mass, dataCardName)
 
