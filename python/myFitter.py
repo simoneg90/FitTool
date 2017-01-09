@@ -295,7 +295,7 @@ def runCombine(mass, fileName, outDir, doAsimov=False, isBlinded=False):
   nMax = 6
   if doAsimov:
     myPrint("Warning: asimov option activated! Combine running on one toy!", "-")
-    asimov=1
+    asimov=-1
     combineFileName = "higgsCombineTest.Asymptotic.mH%s.123456.root"%(str(mass))
   else:
     asimov=0
@@ -575,10 +575,15 @@ if __name__ == '__main__':
       help="roodataset tree name")
   parser.add_option('--setConstant', dest="setConst", default=False, action='store_true',
       help="set all the fit parameters constant. If false, the datacard will have the bkg parameters set as FLATPARAM")
+  parser.add_option('--mcHisto', dest="mcHisto", type="string", default="allBkgHisto",
+      help="histogram name of MC background")
+  parser.add_option('--sigHisto', dest="sigHisto", type="string", default="signalHisto_",
+      help="histogram name of signal shape")
 
   (options,args) = parser.parse_args()
 
   
+  sigHistoName = options.sigHisto+str(options.res_mass)
   outDirName=options.outDir+'_m'+str(options.res_mass)
   if options.runCombine:
     dataCardName = "%s/datacard_m%d_VGamma.txt" % (outDirName,options.res_mass)
@@ -711,7 +716,7 @@ if __name__ == '__main__':
   signalFileInput = TFile.Open(options.signalFileName)
   if not signalFileInput:
     print "Warning, file: ", options.signalFileName, " not opened!"
-  signalHist, nBins, xLow, xHigh = importRooDatahist(signalFileInput, mVg, "signalHisto_"+str(options.res_mass), "signal_exp_"+str(options.res_mass), 20)
+  signalHist, nBins, xLow, xHigh = importRooDatahist(signalFileInput, mVg, sigHistoName, "signal_exp_"+str(options.res_mass), 20)
   rangeLow=TMath.Max(600., options.res_mass-0.3*options.res_mass)
   rangeHigh=TMath.Min(3600., options.res_mass+0.3*options.res_mass)
 
@@ -837,7 +842,7 @@ if __name__ == '__main__':
   #fr = binnedFit(extDijetPdf,dataHist,sideband,options.useWeight)       
   mc_normalised = RooExtendPdf("mc_function_normalised","mc_function_normalised", mc, mc_function_norm)#alised_norm)
 
-  mcHist, nBins, xLow, xHigh = importRooDatahist(signalFileInput, mVg, "allBkgHisto", "mc_exp", 20)
+  mcHist, nBins, xLow, xHigh = importRooDatahist(signalFileInput, mVg, options.mcHisto, "mc_exp", 20)
   rangeLow, rangeHigh = getGoodRange(mcHist, mVg, True)
 
   fr2 = mc_normalised.fitTo(mcHist, RooFit.Range(rangeLow, rangeHigh))#, RooFit.Strategy(2))
