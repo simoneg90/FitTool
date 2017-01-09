@@ -617,13 +617,15 @@ if __name__ == '__main__':
   if options.binned:
     #print "Found binned file"
     dataHist = importRooDatahist(fileInput, mVg, options.histoName)
+    data_val = dataHist
   else:
     dataSet = importRooDataset(fileInput, mVg, "data_obs", options.treeName)
+    data_val = dataSet
 
 
   if options.doBias:
     dataCardName = "%s/datacard_m%d_VGamma.txt" % (outDirName,options.res_mass)
-    doBias("WS_Vg", "%s/WS_Vg_%i.root"%(outDirName,options.res_mass), outDirName, dataCardName, options.res_mass, rangeVarLow, rangeVarHigh, mVg, dataSet, options.nToys, options.nExpt)
+    doBias("WS_Vg", "%s/WS_Vg_%i.root"%(outDirName,options.res_mass), outDirName, dataCardName, options.res_mass, rangeVarLow, rangeVarHigh, mVg, data_val, options.nToys, options.nExpt)
     endProgram = time.time()
     myPrint("Time elapsed: %f s"%(endProgram-startProgram))
     sys.exit("Completing bias test")
@@ -647,15 +649,18 @@ if __name__ == '__main__':
 
   dataBinned = RooDataHist()
   dataBinned.SetName("dataBinned")#,"dataBinned", mVg)
-  dataBinned = dataSet.binnedClone("dataBinned", mVg.GetName())#"dataBinned")
+  if options.binned:
+    dataBinned = data_val
+  else:
+    dataBinned = dataSet.binnedClone("dataBinned", mVg.GetName())#"dataBinned")
   histoData = TH1F()
   histoData.SetName("histoData")#,"histoData")
   nBins, xLow, xHigh = getHistoInfo(dataBinned.createHistogram("histoData", mVg))
 
   rangeLow, rangeHigh = getGoodRange(dataBinned, mVg, True)
 
-  fr = bg_function_normalised.fitTo(dataSet, RooFit.Range(rangeLow, rangeHigh))#, RooFit.Strategy(2))
-  bg_function.fitTo(dataSet, RooFit.Range(rangeLow, rangeHigh))#, RooFit.Strategy(2))
+  fr = bg_function_normalised.fitTo(data_val, RooFit.Range(rangeLow, rangeHigh))#, RooFit.Strategy(2))
+  bg_function.fitTo(data_val, RooFit.Range(rangeLow, rangeHigh))#, RooFit.Strategy(2))
 
 
 #  pdf.Print("v")
@@ -664,7 +669,7 @@ if __name__ == '__main__':
   
   #rootTools.Utils.importToWS(WS_Vg,fr)
 #  fr = doBinnedFit(pdf, dataSet, 600, 3000)
-  dataSet.plotOn(frameBkg)
+  data_val.plotOn(frameBkg)
   bg_function.plotOn(frameBkg)#, RooFit.VisualizeError(fr,2), RooFit.FillColor(kRed))
   nset =  RooArgSet(mVg) 
   #print "----------> ", pdf.getVal(nset)
@@ -675,7 +680,7 @@ if __name__ == '__main__':
 
   c_bkg = TCanvas("c_bkg","c_bkg",1)
   xPad = 0.3
-  p_1Bkg = TPad("p_1Bkg", "Bkg plot", 0, xPad-.01, 1, 1)
+  p_1Bkg = TPad("p_1Bkg", "Bkg plot LOG", 0, xPad-.01, 1, 1)
   p_1Bkg.SetFillStyle(4000)
   p_1Bkg.SetFrameFillColor(0)
   p_1Bkg.SetBottomMargin(0.02)
@@ -689,7 +694,7 @@ if __name__ == '__main__':
   p_2Bkg.SetBorderSize(2)
   p_2Bkg.SetFrameBorderMode(0)
   p_2Bkg.SetFrameBorderMode(0)
-                                                                                                                          
+
   p_1Bkg.Draw()
   p_2Bkg.Draw()
 
@@ -709,7 +714,44 @@ if __name__ == '__main__':
   bkgPull.GetXaxis().SetLabelSize(.08)
   bkgPull.Draw("ABX")
   pullBkgHisto.Draw("SAME")
-  c_bkg.SaveAs("%s/bkg_fit.png"%(outDirName))
+  c_bkg.SaveAs("%s/bkg_fit_Log.png"%(outDirName))
+
+  c_bkg_1 = TCanvas("c_bkg_1","c_bkg_1",1)
+  p_1Bkg_1 = TPad("p_1Bkg_1", "Bkg plot", 0, xPad-.01, 1, 1)
+  p_1Bkg_1.SetFillStyle(4000)
+  p_1Bkg_1.SetFrameFillColor(0)
+  p_1Bkg_1.SetBottomMargin(0.02)
+  p_1Bkg_1.SetTopMargin(0.06)
+  
+  p_2Bkg_1 = TPad("p_2Bkg_1", "Bkg pull",0,0,1,xPad)
+  p_2Bkg_1.SetBottomMargin((1.-xPad)/xPad*0.13)
+  p_2Bkg_1.SetTopMargin(0.03)
+  p_2Bkg_1.SetFillColor(0)
+  p_2Bkg_1.SetBorderMode(0)
+  p_2Bkg_1.SetBorderSize(2)
+  p_2Bkg_1.SetFrameBorderMode(0)
+  p_2Bkg_1.SetFrameBorderMode(0)
+  
+  p_1Bkg_1.Draw()
+  p_2Bkg_1.Draw()
+  
+  p_1Bkg_1.cd()
+  frameBkg.Draw()
+  p_2Bkg_1.cd()
+  #frameBkgPull.Draw()
+  gPad.SetGridy()
+  pullBkgHisto.SetLineColor(kBlack)
+  pullBkgHisto.SetLineWidth(1)
+  pullBkgHisto.SetFillColor(kOrange+8)
+  bkgPull.SetFillColor(kWhite)
+  bkgPull.SetLineColor(kWhite)
+  bkgPull.SetMarkerColor(kWhite)
+  bkgPull.GetYaxis().SetLabelSize(.08)
+  bkgPull.GetXaxis().SetLabelSize(.08)
+  bkgPull.Draw("ABX")
+  pullBkgHisto.Draw("SAME")
+  c_bkg_1.SaveAs("%s/bkg_fit.png"%(outDirName))
+
   
   myPrint("Analysing signal")
   print "Opening ", options.signalFileName, " signal file"
@@ -790,7 +832,7 @@ if __name__ == '__main__':
   frameSgnPull.addPlotable(sgnPull,"H")#, SetFillColor(kOrange), SetLineWidth(2), SetLineColor(kBlack))
 
   c_sgn = TCanvas("c_sgn","c_sgn",1)
-  p_1Sgn = TPad("p_1Sgn", "Sgn plot", 0, xPad-.01, 1, 1)
+  p_1Sgn = TPad("p_1Sgn", "Sgn plot Log", 0, xPad-.01, 1, 1)
   p_1Sgn.SetFillStyle(4000)
   p_1Sgn.SetFrameFillColor(0)
   p_1Sgn.SetBottomMargin(0.02)
@@ -827,7 +869,36 @@ if __name__ == '__main__':
   sgnPull.Draw("ABX")
   myHisto.Draw("histosame")
   
-  c_sgn.SaveAs("%s/sgn_fit.png"%(outDirName))
+  c_sgn.SaveAs("%s/sgn_fit_Log.png"%(outDirName))
+
+  c_sgn_1 = TCanvas("c_sgn_1","c_sgn",1)
+  p_1Sgn_1 = TPad("p_1Sgn_1", "Sgn plot", 0, xPad-.01, 1, 1)
+  p_1Sgn_1.SetFillStyle(4000)
+  p_1Sgn_1.SetFrameFillColor(0)
+  p_1Sgn_1.SetBottomMargin(0.02)
+  p_1Sgn_1.SetTopMargin(0.06)
+  
+  p_2Sgn_1 = TPad("p_2Sgn_1", "Sgn pull",0,0,1,xPad)
+  p_2Sgn_1.SetBottomMargin((1.-xPad)/xPad*0.13)
+  p_2Sgn_1.SetTopMargin(0.03)
+  p_2Sgn_1.SetFillColor(0)
+  p_2Sgn_1.SetBorderMode(0)
+  p_2Sgn_1.SetBorderSize(2)
+  p_2Sgn_1.SetFrameBorderMode(0)
+  p_2Sgn_1.SetFrameBorderMode(0)
+  
+  p_1Sgn_1.Draw()
+  p_2Sgn_1.Draw()
+  
+  p_1Sgn_1.cd()
+  frameSgn.Draw()
+  p_2Sgn_1.cd()
+  #frameSgnPull.Draw()
+  gPad.SetGridy()
+  sgnPull.Draw("ABX")
+  myHisto.Draw("histosame")
+  
+  c_sgn_1.SaveAs("%s/sgn_fit.png"%(outDirName))
 
 
   mc_function_norm = RooRealVar ("mc_function_norm", "mc_function_norm", 10., 1., 2000000.)
@@ -862,7 +933,7 @@ if __name__ == '__main__':
 
 
   c_mc = TCanvas("c_mc","c_mc",1)
-  p_1Mc = TPad("p_1Mc", "Mc plot", 0, xPad-.01, 1, 1)
+  p_1Mc = TPad("p_1Mc", "Mc plot Log", 0, xPad-.01, 1, 1)
   p_1Mc.SetFillStyle(4000)
   p_1Mc.SetFrameFillColor(0)
   p_1Mc.SetBottomMargin(0.02)
@@ -899,6 +970,35 @@ if __name__ == '__main__':
   mcPull.Draw("ABX")
   mcPullHisto.Draw("histosame")
   
+  c_mc.SaveAs("%s/mc_fit_Log.png"%(outDirName))
+
+  c_mc_1 = TCanvas("c_mc_1","c_mc",1)
+  p_1Mc_1 = TPad("p_1Mc_1", "Mc plot", 0, xPad-.01, 1, 1)
+  p_1Mc_1.SetFillStyle(4000)
+  p_1Mc_1.SetFrameFillColor(0)
+  p_1Mc_1.SetBottomMargin(0.02)
+  p_1Mc_1.SetTopMargin(0.06)
+  
+  p_2Mc_1 = TPad("p_2Mc_1", "Mc pull",0,0,1,xPad)
+  p_2Mc_1.SetBottomMargin((1.-xPad)/xPad*0.13)
+  p_2Mc_1.SetTopMargin(0.03)
+  p_2Mc_1.SetFillColor(0)
+  p_2Mc_1.SetBorderMode(0)
+  p_2Mc_1.SetBorderSize(2)
+  p_2Mc_1.SetFrameBorderMode(0)
+  p_2Mc_1.SetFrameBorderMode(0)
+  
+  p_1Mc_1.Draw()
+  p_2Mc_1.Draw()
+  
+  p_1Mc_1.cd()
+  frameMc.Draw()
+  p_2Mc_1.cd()
+  #frameMcPull.Draw()
+  gPad.SetGridy()
+  mcPull.Draw("ABX")
+  mcPullHisto.Draw("histosame")
+  
   c_mc.SaveAs("%s/mc_fit.png"%(outDirName))
 
 
@@ -931,7 +1031,7 @@ if __name__ == '__main__':
 
   WS_Vg = RooWorkspace("WS_Vg")#, kTRUE)
   rootTools.Utils.importToWS(WS_Vg, mVg)
-  rootTools.Utils.importToWS(WS_Vg, dataSet)
+  rootTools.Utils.importToWS(WS_Vg, data_val)
   rootTools.Utils.importToWS(WS_Vg, bg_function)#_normalised)
   rootTools.Utils.importToWS(WS_Vg, signalHist)
   rootTools.Utils.importToWS(WS_Vg, dcb)#signal_normalised)
