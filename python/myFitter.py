@@ -579,6 +579,14 @@ if __name__ == '__main__':
       help="histogram name of MC background")
   parser.add_option('--sigHisto', dest="sigHisto", type="string", default="signalHisto_",
       help="histogram name of signal shape")
+  parser.add_option('--rVarName', dest="rVarName", type="string", default="ak08_photon_mass",
+       help="tree leaf/branch name of the invariant mass")
+  parser.add_option('--rangeVarHigh', dest="rangeVarHigh", type="float", default="4000.",
+       help="realvar high limit range")
+  parser.add_option('--rangeVarLow', dest="rangeVarLow", type="float", default="600.",
+       help="reavar low limit range")
+  parser.add_option('--nDivisions', dest="nDivisions", type="int", default="40",
+       help="bins width for plots")
 
   (options,args) = parser.parse_args()
 
@@ -603,16 +611,14 @@ if __name__ == '__main__':
   fileInput = TFile.Open(options.inputFileName)
 
   os.system('mkdir -p %s'%(outDirName))
-  rangeVarLow = 600
-  rangeVarHigh = 4000
-  bins = (rangeVarHigh-rangeVarLow)/40
+  bins = (options.rangeVarHigh-options.rangeVarLow)/options.nDivisions
 
   myPrint("Analysing background")
   if not fileInput:
     print "File ", options.inputFileName, " not found!"
     sys.exit("File not found")
 
-  mVg = RooRealVar("ak08_photon_mass","ak08_photon_mass", rangeVarLow, rangeVarHigh)
+  mVg = RooRealVar(options.rVarName, options.rVarName, options.rangeVarLow, options.rangeVarHigh)
 
   if options.binned:
     #print "Found binned file"
@@ -625,7 +631,7 @@ if __name__ == '__main__':
 
   if options.doBias:
     dataCardName = "%s/datacard_m%d_VGamma.txt" % (outDirName,options.res_mass)
-    doBias("WS_Vg", "%s/WS_Vg_%i.root"%(outDirName,options.res_mass), outDirName, dataCardName, options.res_mass, rangeVarLow, rangeVarHigh, mVg, data_val, options.nToys, options.nExpt)
+    doBias("WS_Vg", "%s/WS_Vg_%i.root"%(outDirName,options.res_mass), outDirName, dataCardName, options.res_mass, options.rangeVarLow, options.rangeVarHigh, mVg, data_val, options.nToys, options.nExpt)
     endProgram = time.time()
     myPrint("Time elapsed: %f s"%(endProgram-startProgram))
     sys.exit("Completing bias test")
@@ -652,7 +658,7 @@ if __name__ == '__main__':
   if options.binned:
     dataBinned = data_val
   else:
-    dataBinned = dataSet.binnedClone("dataBinned", mVg.GetName())#"dataBinned")
+    dataBinned = data_val.binnedClone("dataBinned", mVg.GetName())#"dataBinned")
   histoData = TH1F()
   histoData.SetName("histoData")#,"histoData")
   nBins, xLow, xHigh = getHistoInfo(dataBinned.createHistogram("histoData", mVg))
@@ -804,7 +810,8 @@ if __name__ == '__main__':
   dcb.fitTo(signalHist, RooFit.Range(rangeLow, rangeHigh))#, RooFit.Strategy(2))
 
   frameSgn = mVg.frame(RooFit.Bins(bins))
-  frameSgn.SetMaximum(3000)
+#  frameSgn.SetMaximum(3000)
+#  frameSgn.SetMinimum(0.01)
   frameSgnPull = mVg.frame(RooFit.Bins(bins))
   
 #  print dcb.getVal()
@@ -851,8 +858,12 @@ if __name__ == '__main__':
   p_2Sgn.Draw()
 
   p_1Sgn.cd()
-  gPad.SetLogy()
-  frameSgn.Draw()
+  gPad.SetLogy() 
+  fakeH = TH1D("fakeH","",bins, xLow, xHigh) #when having negative bins in the signal histogram (it's reweighted)
+  fakeH.GetYaxis().SetRangeUser(0.1,3000)
+  fakeH.Draw()
+  frameSgn.Draw("SAME")
+
   p_2Sgn.cd()
   #frameSgnPull.Draw()
   gPad.SetGridy()
@@ -860,15 +871,16 @@ if __name__ == '__main__':
   myHisto.SetLineColor(kBlack)
   myHisto.SetLineWidth(1)
   myHisto.SetFillColor(kOrange+8)
-  sgnPull.GetXaxis().SetTitle("inv. mass [GeV]")
-  sgnPull.GetYaxis().SetTitle("pull")
-  sgnPull.SetFillColor(kWhite)
-  sgnPull.SetLineColor(kWhite)
-  sgnPull.SetMarkerColor(kWhite)
-  sgnPull.SetMarkerStyle(21)
   sgnPull.Draw("ABX")
-  myHisto.Draw("histosame")
-  
+#  sgnPull.GetXaxis().SetTitle("inv. mass [GeV]")
+#  sgnPull.GetYaxis().SetTitle("pull")
+#  sgnPull.SetFillColor(kWhite)
+#  sgnPull.SetLineColor(kWhite)
+#  sgnPull.SetMarkerColor(kWhite)
+#  sgnPull.SetMarkerStyle(21)
+#  sgnPull.Draw("ABX")
+#  myHisto.Draw("histosame")
+#  
   c_sgn.SaveAs("%s/sgn_fit_Log.png"%(outDirName))
 
   c_sgn_1 = TCanvas("c_sgn_1","c_sgn",1)
