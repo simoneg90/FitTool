@@ -1,7 +1,7 @@
 
 
 #define nMasses 20
-#define lumi 20000 #luminosity pb-1
+#define lumi 20000 //luminosity pb-1
 void drawLimitsPlot(std::string tau21="020"){
 
   std::cout<<"Entering in drawLimitsPlot program"<<std::endl;
@@ -26,6 +26,8 @@ void drawLimitsPlot(std::string tau21="020"){
   TGraphAsymmErrors *limitMass2Sigma = new TGraphAsymmErrors(0);
   TGraph *nEvtsObs = new TGraph(0);
   TGraph *nEvtsExp = new TGraph(0);
+  TGraphAsymmErrors *nEvtsExp1Sigma = new TGraphAsymmErrors(0);
+  TGraphAsymmErrors *nEvtsExp2Sigma = new TGraphAsymmErrors(0);
   std::string fileName="";
 
   std::ofstream outputList;
@@ -80,6 +82,10 @@ void drawLimitsPlot(std::string tau21="020"){
 
     nEvtsExp->SetPoint(counter, mass, expected*lumi);
     nEvtsObs->SetPoint(counter, mass, observed*lumi);
+    nEvtsExp1Sigma->SetPoint(counter, mass, expected*lumi);
+    nEvtsExp1Sigma->SetPointError(counter,0,0, (expected-oneSigmaLow)*lumi, (oneSigmaHigh-expected)*lumi);
+    nEvtsExp2Sigma->SetPoint(counter, mass, expected*lumi);
+    nEvtsExp2Sigma->SetPointError(counter,0,0, (expected-twoSigmaLow)*lumi, (twoSigmaHigh-expected)*lumi);
 
     ++counter;
   }
@@ -151,7 +157,18 @@ void drawLimitsPlot(std::string tau21="020"){
   replace( tau21.begin(), tau21.end(), '.', 'p' );
   c->SaveAs(Form("limits_%s.pdf",tau21.c_str()));
 
-
+  TMultiGraph *nEvtsGraph = new TMultiGraph();
+  nEvtsGraph->Add(nEvtsExp2Sigma);
+  nEvtsGraph->Add(nEvtsExp1Sigma);
+  
+  nEvtsExp2Sigma->SetFillColor(5);
+  nEvtsExp1Sigma->SetFillColor(kGreen-7);
+  nEvtsExp->SetLineStyle(2);
+  nEvtsExp1Sigma->SetLineStyle(2);
+  nEvtsExp2Sigma->SetLineStyle(2);
+  nEvtsExp1Sigma->SetLineWidth(2);
+  nEvtsExp2Sigma->SetLineWidth(2);
+  nEvtsObs->SetLineWidth(2);
 
   TCanvas *c1 = new TCanvas("c1","# events Spectrum", 1);
   nEvtsExp->GetXaxis()->SetTitle("resonance mass [GeV]");
@@ -165,6 +182,7 @@ void drawLimitsPlot(std::string tau21="020"){
 
   nEvtsExp->GetYaxis()->SetTitle("#Evts");
   nEvtsExp->Draw("AP");
+  nEvtsGraph->Draw("a3");
   nEvtsObs->Draw("CSAME");
   leg1->Draw("SAME");
   latex.Draw();
